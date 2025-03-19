@@ -71,7 +71,7 @@ def compute_dominators(cfg):
     dominators = {node: set(cfg.nodes()) for node in cfg}
     dominators[entry] = {entry}
     changed = True
-    
+
     while changed:
         changed = False
         for node in cfg:
@@ -88,7 +88,7 @@ def compute_dominators(cfg):
 
 def compute_dominance_frontiers(cfg, dominators):
     df = {node: set() for node in cfg}
-    
+
     for node in cfg:
         if len(set(cfg.predecessors(node))) > 1:
             for pred in cfg.predecessors(node):
@@ -103,27 +103,37 @@ def compute_dominance_frontiers(cfg, dominators):
 def insert_phi_functions(cfg, df, variables):
     phi_inserted = {var: set() for var in variables}
     worklist = {var: set() for var in variables}
-    
+
+    # Find all blocks where variables are assigned
     for node in cfg:
         for instr in node.instrlist:
             if isinstance(instr[0], ChironAST.AssignmentCommand):
                 var = instr[0].lvar
                 if var in variables:
                     worklist[var].add(node)
-    
+
     for var in variables:
         while worklist[var]:
             block = worklist[var].pop()
+
             for df_node in df[block]:
-                if df_node not in phi_inserted[var]:
-                    df_node.insert_phi(var)
+                if df_node not in phi_inserted[var]:  # Avoid duplicate φ-functions
+                    predecessors = list(cfg.predecessors(df_node))
+
+                    # Get variables from predecessor blocks without index suffix
+                    phi_args = [var for _ in predecessors]  # Just the variable name
+
+                    df_node.insert_phi(var, phi_args)
                     phi_inserted[var].add(df_node)
                     worklist[var].add(df_node)
 
 def convert_to_ssa(cfg):
     dominators = compute_dominators(cfg)
     df = compute_dominance_frontiers(cfg, dominators)
-    variables = {instr[0].lvar for node in cfg for instr in node.instrlist if isinstance(instr[0], ChironAST.AssignmentCommand)}
+    variables = {
+        instr[0].lvar for node in cfg for instr in node.instrlist
+        if isinstance(instr[0], ChironAST.AssignmentCommand)
+    }
     insert_phi_functions(cfg, df, variables)
     return cfg
 
